@@ -1,0 +1,10 @@
+# 에이전트 도구 로컬 상태 (Claude Code, oh-my-claudecode, unlazy)
+.claude/
+.omc/
+.unlazy/
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
