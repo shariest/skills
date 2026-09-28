@@ -76,6 +76,7 @@ COMMON_SKILL_PACKAGES=(
 ECC_PACKAGE="ecc-universal@2.2.1"
 ECC_PLUGIN="ecc@ecc"
 OUROBOROS_INSTALLER_URL="https://raw.githubusercontent.com/Q00/ouroboros/main/scripts/install.sh"
+UV_INSTALLER_URL="https://astral.sh/uv/install.sh"
 IM_NOT_AI_REPOSITORY_URL="https://github.com/epoko77-ai/im-not-ai.git"
 # im-not-ai 의 install.sh 는 이 디렉터리를 가리키는 심링크를 만든다. 지우면 스킬이 깨진다.
 IM_NOT_AI_DIRECTORY="${XDG_DATA_HOME:-$HOME/.local/share}/im-not-ai"
@@ -644,8 +645,25 @@ install_macos_casks() {
 # apt-get install 은 이미 설치된 패키지도 새 버전이 있으면 올린다
 install_linux_apt_packages() {
   run_command as_root apt-get update || return 1
+  # 배포판 버전에 따라 없는 패키지가 있다(Ubuntu 24.04 는 libreoffice-pdfimport 를 core 에 합쳤다).
+  # 하나라도 없으면 apt-get install 전체가 실패하므로 설치 후보가 있는 것만 설치한다.
+  local package policy available_packages=()
+  for package in "${LINUX_APT_PACKAGES[@]}"; do
+    # 출력을 먼저 받는다. 파이프로 grep -q 에 넘기면 grep 이 먼저 끝나 apt-cache 가 SIGPIPE 로 죽고,
+    # pipefail 때문에 후보가 있어도 없다고 판정된다.
+    policy="$(LC_ALL=C apt-cache policy "$package" 2>/dev/null)"
+    if contains_ignoring_case "$policy" "Candidate: " && ! contains_ignoring_case "$policy" "Candidate: (none)"; then
+      available_packages+=("$package")
+    else
+      echo "건너뜀: $package (이 배포판에는 설치 후보가 없다)"
+    fi
+  done
+  if [ "${#available_packages[@]}" -eq 0 ]; then
+    SKIP_REASON="설치할 수 있는 패키지가 없음"
+    return "$SKIPPED"
+  fi
   run_command as_root env DEBIAN_FRONTEND=noninteractive \
-    apt-get install -y --no-install-recommends "${LINUX_APT_PACKAGES[@]}"
+    apt-get install -y --no-install-recommends "${available_packages[@]}"
 }
 
 # ── im-not-ai 레인 ───────────────────────────────────────────────────────────
@@ -683,6 +701,15 @@ install_ouroboros() {
       runtime="claude"
     else
       runtime="codex"
+    fi
+  fi
+  # 설치기는 uv, pipx 가 없으면 python3 버전만 보고 pip 를 고른다. 새 Ubuntu 처럼 python3 에 pip 가 없으면
+  # 실패하므로, 설치기가 원래 하려던 대로 uv 를 먼저 받아 둔다. uv 는 자체 Python 을 쓴다.
+  if ! command -v uv >/dev/null 2>&1 && ! command -v pipx >/dev/null 2>&1; then
+    echo "+ curl -LsSf $UV_INSTALLER_URL | sh"
+    if [ "$IS_DRY_RUN" = false ]; then
+      curl -LsSf "$UV_INSTALLER_URL" | sh || return 1
+      export PATH="$HOME/.local/bin:$PATH"
     fi
   fi
   echo "+ curl -fsSL $OUROBOROS_INSTALLER_URL | OUROBOROS_INSTALL_RUNTIME=$runtime bash"
