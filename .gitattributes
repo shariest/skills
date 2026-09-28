@@ -1,0 +1,5 @@
+# Windows 에서 체크아웃해도 bash 가 \r 때문에 깨지지 않게 LF 로 고정
+*.sh  text eol=lf
+# cmd.exe 는 LF 줄바꿈이면 goto/call 레이블을 잘못 찾는 경우가 있다.
+# raw URL 로 내려받아도 CRLF 가 유지되도록 변환 없이 CRLF 그대로 저장한다.
+*.bat -text
